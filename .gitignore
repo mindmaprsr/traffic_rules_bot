@@ -1,0 +1,5 @@
+.idea/
+.DS_Store
+.ipynb_checkpoints/
+chroma_db_pdf/
+traffic_bot_temp.py
