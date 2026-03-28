@@ -1,4 +1,5 @@
 import os
+import re
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -12,12 +13,41 @@ st.title("🚨🚦 Traffic Rules Chat App")
 VECTORSTORE_DIR = "./chroma_db_pdf"
 PDF_PATH = "Drivers-Handbook.pdf"
 
+# Number words that appear before a noun and carry a quantity constraint.
+# "the three rules" → "three rules", but "the rule" is left alone.
+_NUMBER_WORDS = (
+    "one|two|three|four|five|six|seven|eight|nine|ten|"
+    "eleven|twelve|thirteen|fourteen|fifteen|"
+    "twenty|thirty|forty|fifty|hundred"
+)
+_THE_BEFORE_NUMBER = re.compile(
+    rf"\bthe\s+(?=\d+|(?:{_NUMBER_WORDS})\b)", re.IGNORECASE
+)
+
+
+def normalize_query(question: str) -> str:
+    """
+    Remove 'the' only when it precedes a number word or digit.
+
+    'What are the three rules'  →  'What are three rules'
+    'What is the speed limit'   →  unchanged  (no number follows 'the')
+
+    This is deterministic, zero-latency, and cannot accidentally drop
+    keywords the way an LLM rewriter can.
+    """
+    normalized = _THE_BEFORE_NUMBER.sub("", question).strip()
+    # Collapse any double spaces left behind
+    normalized = re.sub(r" {2,}", " ", normalized)
+    if normalized != question:
+        print(f"Original  : {question}")
+        print(f"Normalized: {normalized}")
+    return normalized
+
 
 # ── Cached resources: only built once per session ────────────────────────────
 
 @st.cache_resource(show_spinner="📄 Loading and indexing the handbook...")
 def load_vectorstore() -> Chroma:
-    """Load PDF, chunk it, embed, and persist — or reload from disk if already done."""
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
     if os.path.exists(VECTORSTORE_DIR) and os.listdir(VECTORSTORE_DIR):
@@ -35,8 +65,8 @@ def load_vectorstore() -> Chroma:
         chunk_overlap=200,
     )
     chunks = splitter.split_documents(documents)
-
     print(f"🔨 Built vector store from {len(chunks)} chunks.")
+
     return Chroma.from_documents(
         documents=chunks,
         embedding=embeddings,
@@ -46,11 +76,13 @@ def load_vectorstore() -> Chroma:
 
 @st.cache_resource(show_spinner="🤖 Warming up the LLM...")
 def build_qa_chain(_vectorstore: Chroma) -> RetrievalQA:
-    """Build the RetrievalQA chain once and reuse it."""
     template = """You are an expert on German traffic rules and road safety.
 Use ONLY the context below to answer the question.
 If the answer is not in the context, say "I don't have enough information in the handbook to answer that."
 Do NOT make up or infer rules that are not explicitly stated.
+
+IMPORTANT: If the question asks for a specific number of items (e.g. "three", "five", "2"),
+you MUST return exactly that many. Do not return more or fewer.
 
 Context:
 {context}
@@ -79,28 +111,6 @@ Answer:"""
     )
 
 
-def rewrite_query(question: str) -> str:
-    """
-    Normalise the query before it hits the vector store.
-
-    Definite articles like 'the' signal a presupposed canonical answer to the
-    embedding model, shifting the query vector away from general informational
-    chunks. Rewriting strips that presupposition so retrieval stays robust
-    regardless of how the user words their question.
-    """
-    llm = OllamaLLM(model="llama3.2", temperature=0)
-    instruction = (
-        "Rewrite the following question to be more generic and retrieval-friendly. "
-        "Remove definite articles or phrasing that implies a single canonical answer exists. "
-        "Return only the rewritten question, no explanation, no punctuation changes.\n\n"
-        f"Question: {question}"
-    )
-    rewritten = llm.invoke(instruction).strip()
-    print(f"Original : {question}")
-    print(f"Rewritten: {rewritten}")
-    return rewritten
-
-
 # ── Build resources ───────────────────────────────────────────────────────────
 
 vectorstore = load_vectorstore()
@@ -122,17 +132,16 @@ if submitted:
         st.warning("Please enter a question before submitting.")
     else:
         with st.spinner("Thinking..."):
-            rewritten = rewrite_query(question)
-            response = qa_chain.invoke(rewritten)
+            normalized = normalize_query(question)
+            response = qa_chain.invoke(normalized)
 
         st.subheader("Answer")
         st.write(response["result"])
 
-        # Optional: show what the query was rewritten to (helpful for debugging)
-        with st.expander("🔁 Rewritten query"):
-            st.caption(rewritten)
+        if normalized != question:
+            with st.expander("🔁 Normalized query"):
+                st.caption(normalized)
 
-        # Show source pages so users can verify answers against the handbook
         with st.expander("📚 Source pages used"):
             seen = set()
             for doc in response["source_documents"]:
