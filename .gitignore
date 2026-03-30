@@ -3,3 +3,6 @@
 .ipynb_checkpoints/
 chroma_db_pdf/
 traffic_bot_temp.py
+.streamlit/
+__pycache__/
+*.pyc

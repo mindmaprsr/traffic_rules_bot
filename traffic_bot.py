@@ -3,7 +3,7 @@ import re
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_ollama import OllamaEmbeddings, OllamaLLM
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_chroma import Chroma
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 from langchain_core.prompts import PromptTemplate
@@ -13,8 +13,12 @@ st.title("🚨🚦 Traffic Rules Chat App")
 VECTORSTORE_DIR = "./chroma_db_pdf"
 PDF_PATH = "Drivers-Handbook.pdf"
 
-# Number words that appear before a noun and carry a quantity constraint.
-# "the three rules" → "three rules", but "the rule" is left alone.
+# ── Load API key from Streamlit secrets ──────────────────────────────────────
+
+openai_api_key = st.secrets["OPENAI_API_KEY"]
+
+# ── Query normalisation ──────────────────────────────────────────────────────
+
 _NUMBER_WORDS = (
     "one|two|three|four|five|six|seven|eight|nine|ten|"
     "eleven|twelve|thirteen|fourteen|fifteen|"
@@ -29,14 +33,10 @@ def normalize_query(question: str) -> str:
     """
     Remove 'the' only when it precedes a number word or digit.
 
-    'What are the three rules'  →  'What are three rules'
-    'What is the speed limit'   →  unchanged  (no number follows 'the')
-
-    This is deterministic, zero-latency, and cannot accidentally drop
-    keywords the way an LLM rewriter can.
+    'What are the three rules'  ->  'What are three rules'
+    'What is the speed limit'   ->  unchanged  (no number follows 'the')
     """
     normalized = _THE_BEFORE_NUMBER.sub("", question).strip()
-    # Collapse any double spaces left behind
     normalized = re.sub(r" {2,}", " ", normalized)
     if normalized != question:
         print(f"Original  : {question}")
@@ -47,11 +47,14 @@ def normalize_query(question: str) -> str:
 # ── Cached resources: only built once per session ────────────────────────────
 
 @st.cache_resource(show_spinner="📄 Loading and indexing the handbook...")
-def load_vectorstore() -> Chroma:
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+def load_vectorstore(_api_key: str) -> Chroma:
+    embeddings = OpenAIEmbeddings(
+        model="text-embedding-3-small",   # cheap, fast, 1536-dim
+        api_key=_api_key,
+    )
 
     if os.path.exists(VECTORSTORE_DIR) and os.listdir(VECTORSTORE_DIR):
-        print("✅ Loaded existing vector store from disk.")
+        print("Loaded existing vector store from disk.")
         return Chroma(
             persist_directory=VECTORSTORE_DIR,
             embedding_function=embeddings,
@@ -65,7 +68,7 @@ def load_vectorstore() -> Chroma:
         chunk_overlap=200,
     )
     chunks = splitter.split_documents(documents)
-    print(f"🔨 Built vector store from {len(chunks)} chunks.")
+    print(f"Built vector store from {len(chunks)} chunks.")
 
     return Chroma.from_documents(
         documents=chunks,
@@ -75,7 +78,7 @@ def load_vectorstore() -> Chroma:
 
 
 @st.cache_resource(show_spinner="🤖 Warming up the LLM...")
-def build_qa_chain(_vectorstore: Chroma) -> RetrievalQA:
+def build_qa_chain(_vectorstore: Chroma, _api_key: str) -> RetrievalQA:
     template = """You are an expert on German traffic rules and road safety.
 Use ONLY the context below to answer the question.
 If the answer is not in the context, say "I don't have enough information in the handbook to answer that."
@@ -96,7 +99,11 @@ Answer:"""
         input_variables=["context", "question"],
     )
 
-    llm = OllamaLLM(model="llama3.2", temperature=0.1)
+    llm = ChatOpenAI(
+        model="gpt-4o-mini",   # fast and cost-effective; swap to gpt-4o for higher quality
+        temperature=0.1,
+        api_key=_api_key,
+    )
 
     retriever = _vectorstore.as_retriever(
         search_type="mmr",
@@ -113,8 +120,8 @@ Answer:"""
 
 # ── Build resources ───────────────────────────────────────────────────────────
 
-vectorstore = load_vectorstore()
-qa_chain = build_qa_chain(vectorstore)
+vectorstore = load_vectorstore(openai_api_key)
+qa_chain = build_qa_chain(vectorstore, openai_api_key)
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
@@ -133,7 +140,7 @@ if submitted:
     else:
         with st.spinner("Thinking..."):
             normalized = normalize_query(question)
-            response = qa_chain.invoke(normalized)
+            response = qa_chain.invoke({"query": normalized})
 
         st.subheader("Answer")
         st.write(response["result"])
@@ -142,11 +149,18 @@ if submitted:
             with st.expander("🔁 Normalized query"):
                 st.caption(normalized)
 
-        with st.expander("📚 Source pages used"):
-            seen = set()
-            for doc in response["source_documents"]:
-                page = doc.metadata.get("page", "?")
-                if page not in seen:
-                    seen.add(page)
-                    st.markdown(f"**Page {page}**")
-                    st.caption(doc.page_content[:300] + "…")
+        with st.expander(f"📚 Source pages used ({len(response['source_documents'])} chunks)"):
+            if not response["source_documents"]:
+                st.info("No source documents were returned by the retriever.")
+            else:
+                for i, doc in enumerate(response["source_documents"]):
+                    raw_page = doc.metadata.get("page", None)
+                    page_label = f"Page {raw_page + 1}" if isinstance(raw_page, int) else "Page unknown"
+                    source_file = doc.metadata.get("source", "")
+
+                    with st.container(border=True):
+                        st.markdown(f"**Chunk {i + 1} — {page_label}**")
+                        if source_file:
+                            st.caption(f"Source: {os.path.basename(source_file)}")
+                        content = doc.page_content.strip()
+                        st.text(content[:500] + ("..." if len(content) > 500 else ""))
