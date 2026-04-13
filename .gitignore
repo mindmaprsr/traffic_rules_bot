@@ -6,3 +6,5 @@ traffic_bot_temp.py
 .streamlit/
 __pycache__/
 *.pyc
+.env
+.junie
