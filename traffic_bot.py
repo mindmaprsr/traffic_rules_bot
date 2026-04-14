@@ -3,10 +3,10 @@ import re
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_chroma import Chroma
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 from langchain_core.prompts import PromptTemplate
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 
 st.title("🚨🚦 Traffic Rules Chat App")
 
@@ -15,8 +15,9 @@ PDF_PATH = "Drivers-Handbook.pdf"
 
 # ── Load API key from Streamlit secrets ──────────────────────────────────────
 
-openai_api_key = st.secrets["OPENAI_API_KEY"]
-
+api_key = st.secrets["GOOGLE_API_KEY"]
+os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+os.environ["GOOGLE_GENAI_API_VERSION"] = "v1"
 # ── Query normalisation ──────────────────────────────────────────────────────
 
 _NUMBER_WORDS = (
@@ -48,9 +49,9 @@ def normalize_query(question: str) -> str:
 
 @st.cache_resource(show_spinner="📄 Loading and indexing the handbook...")
 def load_vectorstore(_api_key: str) -> Chroma:
-    embeddings = OpenAIEmbeddings(
-        model="text-embedding-3-small",   # cheap, fast, 1536-dim
-        api_key=_api_key,
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="embedding-001",
+        task_type="retrieval_document"
     )
 
     if os.path.exists(VECTORSTORE_DIR) and os.listdir(VECTORSTORE_DIR):
@@ -99,15 +100,23 @@ Answer:"""
         input_variables=["context", "question"],
     )
 
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",   # fast and cost-effective; swap to gpt-4o for higher quality
-        temperature=0.1,
-        api_key=_api_key,
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=_api_key,
+        temperature=0.2,
     )
 
     retriever = _vectorstore.as_retriever(
         search_type="mmr",
-        search_kwargs={"k": 5, "fetch_k": 20},
+        search_kwargs={
+            "k": 5,
+            "fetch_k": 20,
+            "embedding": GoogleGenerativeAIEmbeddings(   # query-time task type
+                model="models/text-embedding-004",
+                google_api_key=_api_key,
+                task_type="retrieval_query"
+            )
+        },
     )
 
     return RetrievalQA.from_chain_type(
@@ -120,8 +129,8 @@ Answer:"""
 
 # ── Build resources ───────────────────────────────────────────────────────────
 
-vectorstore = load_vectorstore(openai_api_key)
-qa_chain = build_qa_chain(vectorstore, openai_api_key)
+vectorstore = load_vectorstore(api_key)
+qa_chain = build_qa_chain(vectorstore, api_key)
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────

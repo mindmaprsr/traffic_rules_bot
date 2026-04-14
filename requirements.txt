@@ -3,3 +3,9 @@ langchain-chroma
 langchain_ollama
 jupyterlab
 pypdf
+langchain-openai
+langchain-classic
+langchain-core
+langchain-text-splitters
+streamlit
+langchain-google-genai
