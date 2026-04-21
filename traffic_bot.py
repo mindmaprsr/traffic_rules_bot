@@ -8,6 +8,7 @@ from langchain_chroma import Chroma
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
 
 st.title("🚨🚦 Traffic Rules Chat App")
 
@@ -102,7 +103,15 @@ Answer:"""
         input_variables=["context", "question"],
     )
 
-    llm = ChatOpenAI(model="gpt-4o", api_key=st.secrets["OPENAI_API_KEY"])
+    # llm = ChatOpenAI(model="gpt-4o", api_key=st.secrets["OPENAI_API_KEY"])
+    endpoint = HuggingFaceEndpoint(
+    repo_id="MiniMaxAI/MiniMax-M2.5",
+    provider="auto",
+    max_new_tokens=512,        # was 100 — too low, caused truncation/StopIteration
+    do_sample=False,
+    huggingfacehub_api_token=st.secrets["HF_TOKEN"],
+    )
+    llm = ChatHuggingFace(llm=endpoint)  # ← this wrapper fixes the StopIteration
 
     retriever = _vectorstore.as_retriever(
         search_type="mmr",

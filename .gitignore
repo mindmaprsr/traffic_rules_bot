@@ -8,3 +8,4 @@ __pycache__/
 *.pyc
 .env
 .junie
+hf-token.token
