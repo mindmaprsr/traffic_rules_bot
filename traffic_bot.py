@@ -1,12 +1,13 @@
 import os
 import re
 import streamlit as st
+from langchain_openai import ChatOpenAI
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 from langchain_core.prompts import PromptTemplate
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_huggingface import HuggingFaceEmbeddings
 
 st.title("🚨🚦 Traffic Rules Chat App")
 
@@ -15,9 +16,9 @@ PDF_PATH = "Drivers-Handbook.pdf"
 
 # ── Load API key from Streamlit secrets ──────────────────────────────────────
 
-api_key = st.secrets["GOOGLE_API_KEY"]
-os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
-os.environ["GOOGLE_GENAI_API_VERSION"] = "v1"
+api_key = st.secrets["OPENAI_API_KEY"]
+# os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+# os.environ["GOOGLE_GENAI_API_VERSION"] = "v1"
 # ── Query normalisation ──────────────────────────────────────────────────────
 
 _NUMBER_WORDS = (
@@ -49,9 +50,10 @@ def normalize_query(question: str) -> str:
 
 @st.cache_resource(show_spinner="📄 Loading and indexing the handbook...")
 def load_vectorstore(_api_key: str) -> Chroma:
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="embedding-001",
-        task_type="retrieval_document"
+    embeddings = HuggingFaceEmbeddings(
+        model_name="BAAI/bge-small-en-v1.5",  # or bge-base, bge-large
+        model_kwargs={"device": "cpu"},  # use "cuda" if you have a GPU
+        encode_kwargs={"normalize_embeddings": True}  # recommended for BGE
     )
 
     if os.path.exists(VECTORSTORE_DIR) and os.listdir(VECTORSTORE_DIR):
@@ -100,21 +102,17 @@ Answer:"""
         input_variables=["context", "question"],
     )
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key=_api_key,
-        temperature=0.2,
-    )
+    llm = ChatOpenAI(model="gpt-4o", api_key=st.secrets["OPENAI_API_KEY"])
 
     retriever = _vectorstore.as_retriever(
         search_type="mmr",
         search_kwargs={
             "k": 5,
             "fetch_k": 20,
-            "embedding": GoogleGenerativeAIEmbeddings(   # query-time task type
-                model="models/text-embedding-004",
-                google_api_key=_api_key,
-                task_type="retrieval_query"
+            "embedding": HuggingFaceEmbeddings(
+                model_name="BAAI/bge-small-en-v1.5",  # or bge-base, bge-large
+                 model_kwargs={"device": "cpu"},        # use "cuda" if you have a GPU
+                encode_kwargs={"normalize_embeddings": True}  # recommended for BGE
             )
         },
     )
