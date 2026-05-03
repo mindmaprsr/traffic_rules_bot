@@ -18,4 +18,16 @@ How to use:
 2. Data - "Drivers-Handbook.pdf"
 3. Run the jupyter notebook - "working_example.ipynb". It uses ollama embeddinng and LLM model, developed using langchain and Chromadb vector store
 
+Working with Docker:
 
+Build Docker image
+
+```sh
+docker build -t trafficbot-app .
+```
+
+Run container
+
+```sh
+docker run -p 8501:8501 trafficbot-app
+```
