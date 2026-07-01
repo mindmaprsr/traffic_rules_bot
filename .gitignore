@@ -26,6 +26,8 @@ chroma_db/
 # IDEs
 .idea/
 .junie/
+.devcontainer/
+.claude/
 
 # Old root-level files superseded by backend/
 /app.py
@@ -37,8 +39,6 @@ chroma_db/
 /vectorstore.py
 /vectorstore_fastAPI.py
 /utils.py
-/requirements.txt
-/requirements-intel-mac.txt
 /traffic_bot_temp.py
 /Dockerfile
 /Drivers-Handbook.pdf
