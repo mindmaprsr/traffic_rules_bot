@@ -1,33 +1,127 @@
-1. sources:
-Germany: https://adilbari.wordpress.com/wp-content/uploads/2015/07/md-guide-to-driving-in-germany.pdf
-https://routetogermany.com/drivingingermany/road-signs#google_vignette --> not free content or redistributable
-https://www.gettingaroundgermany.info/zeichen2.shtml --> free data
+# Traffic Rules Bot
 
-UK: https://www.gov.uk/browse/driving/highway-code-road-safety
+A RAG-based Q&A app for German traffic rules, powered by LangChain, ChromaDB, and HuggingFace.
 
+---
 
-Prompt: i have a pdf containing traffic rules. This pdf has both images and descriptions of traffic rules. I would like to have a llm application which should be trained on this pdf. When asked questions related to traffic rules it should display both the image and description. How to have a training and inference setup
+## Sources
 
-Required ollama so do the following to install ollama models:
-- Download and install ollama `curl -fsSL https://ollama.com/install.sh | sh` or Visit the official Ollama website and download latest ollama .exe file and install.
-- ollama pull [model] (for both 'nomic-embed-text' and  'llama3.2' models)
+- Germany: https://adilbari.wordpress.com/wp-content/uploads/2015/07/md-guide-to-driving-in-germany.pdf
+- https://www.gettingaroundgermany.info/zeichen2.shtml (free data)
+- UK: https://www.gov.uk/browse/driving/highway-code-road-safety
 
+---
 
-How to use:
-1. Install the requirements - pip install -r requirements.txt
-2. Data - "Drivers-Handbook.pdf"
-3. Run the jupyter notebook - "working_example.ipynb". It uses ollama embeddinng and LLM model, developed using langchain and Chromadb vector store
+## Running the FastAPI App
 
-Working with Docker:
+### 1. Install dependencies
 
-Build Docker image
+```sh
+pip install -r requirements.txt
+```
+
+### 2. Set up environment variables
+
+Copy the example and fill in your keys:
+
+```sh
+cp .env .env.local   # or just edit .env directly
+```
+
+`.env` format:
+
+```
+OPENAI_API_KEY=your_openai_api_key_here
+HF_TOKEN=your_huggingface_token_here
+```
+
+> **Never commit `.env` to git.** It is already listed in `.gitignore`.
+
+### 3. Start the server
+
+```sh
+uvicorn app:app --reload
+```
+
+The API will be available at `http://localhost:8000`.
+
+### 4. Interactive API docs
+
+Open `http://localhost:8000/docs` in your browser to explore and test the endpoints via Swagger UI.
+
+### 5. Ask a question
+
+```sh
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What are the three basic traffic rules in Germany?"}'
+```
+
+**Response format:**
+
+```json
+{
+  "answer": "...",
+  "normalized_query": "...",
+  "source_chunks": [
+    {
+      "chunk_index": 1,
+      "page": "Page 5",
+      "source_file": "Drivers-Handbook.pdf",
+      "content": "..."
+    }
+  ]
+}
+```
+
+### Available endpoints
+
+| Method | Path      | Description                        |
+|--------|-----------|------------------------------------|
+| POST   | `/ask`    | Ask a question about traffic rules |
+| GET    | `/health` | Health check                       |
+
+---
+
+## Running with Docker
+
+Build the image:
 
 ```sh
 docker build -t trafficbot-app .
 ```
 
-Run container
+Run the container (pass env vars at runtime):
 
 ```sh
-docker run -p 8501:8501 trafficbot-app
+docker run -p 8000:8000 \
+  -e OPENAI_API_KEY=your_key \
+  -e HF_TOKEN=your_token \
+  trafficbot-app
+```
+
+---
+
+## Running the Streamlit App (original)
+
+```sh
+streamlit run app.py
+```
+
+---
+
+## Project Structure
+
+```
+traffic_rules_bot/
+├── app.py                # FastAPI application
+├── config_fastAPI.py     # Env-based config for FastAPI
+├── config.py             # Streamlit-based config (original)
+├── qa_chain_fastAPI.py   # QA chain (no Streamlit dependency)
+├── qa_chain.py           # QA chain (original, Streamlit cached)
+├── vectorstore.py        # ChromaDB vector store loader
+├── utils.py              # Query normalisation
+├── Drivers-Handbook.pdf  # Source PDF
+├── chroma_db_pdf/        # Persisted vector store (auto-generated)
+└── .env                  # API keys (never commit this)
 ```

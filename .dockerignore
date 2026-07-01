@@ -1,0 +1,9 @@
+venv
+.env
+.chroma_db_pdf
+chroma_db_pdf
+__pycache__
+*.pyc
+.git
+.DS_Store
+drivers-handbook.pdf

@@ -1,10 +1,9 @@
 import os
-import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-from config import VECTORSTORE_DIR, PDF_PATH
+from config_fastAPI import VECTORSTORE_DIR, PDF_PATH
 
 def get_embeddings() -> HuggingFaceEmbeddings:
     return HuggingFaceEmbeddings(
@@ -13,8 +12,7 @@ def get_embeddings() -> HuggingFaceEmbeddings:
         encode_kwargs={"normalize_embeddings": True},
     )
 
-@st.cache_resource(show_spinner="📄 Loading and indexing the handbook...")
-def load_vectorstore(_api_key: str) -> Chroma:
+def load_vectorstore() -> Chroma:
     embeddings = get_embeddings()
 
     if os.path.exists(VECTORSTORE_DIR) and os.listdir(VECTORSTORE_DIR):

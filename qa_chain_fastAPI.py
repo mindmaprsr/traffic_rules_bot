@@ -1,4 +1,3 @@
-import streamlit as st
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
@@ -20,18 +19,18 @@ Question: {question}
 
 Answer:"""
 
-@st.cache_resource(show_spinner="🤖 Warming up the LLM...")
-def build_qa_chain(_vectorstore: Chroma, _api_key: str) -> RetrievalQA:
+
+def build_qa_chain(vectorstore: Chroma, hf_token: str) -> RetrievalQA:
     endpoint = HuggingFaceEndpoint(
         repo_id="MiniMaxAI/MiniMax-M2.5",
         provider="auto",
         max_new_tokens=512,
         do_sample=False,
-        huggingfacehub_api_token=_api_key,
+        huggingfacehub_api_token=hf_token,
     )
     llm = ChatHuggingFace(llm=endpoint)
 
-    retriever = _vectorstore.as_retriever(
+    retriever = vectorstore.as_retriever(
         search_type="mmr",
         search_kwargs={"k": 5, "fetch_k": 20, "embedding": get_embeddings()},
     )
