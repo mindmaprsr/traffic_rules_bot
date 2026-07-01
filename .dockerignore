@@ -1,9 +1,8 @@
-venv
-.env
-.chroma_db_pdf
-chroma_db_pdf
-__pycache__
-*.pyc
+**/__pycache__
+**/*.pyc
+**/.env
+**/.DS_Store
 .git
-.DS_Store
-drivers-handbook.pdf
+traffic-rules-venv
+chroma_db_pdf
+*.ipynb

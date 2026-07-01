@@ -1,12 +1,44 @@
-.idea/
-.DS_Store
-.ipynb_checkpoints/
-chroma_db_pdf/
-traffic_bot_temp.py
-.streamlit/
+# Environment
+.env
+.streamlit/secrets.toml
+hf-token.token
+
+# Python
 __pycache__/
 *.pyc
-.env
-.junie
-hf-token.token
-venv
+*.pyo
+
+# Virtual environments
+venv/
+traffic-rules-venv/
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints/
+
+# Vector store (generated at runtime)
+chroma_db_pdf/
+chroma_db/
+
+# OS
+.DS_Store
+
+# IDEs
+.idea/
+.junie/
+
+# Old root-level files superseded by backend/
+/app.py
+/app_fastAPI.py
+/config.py
+/config_fastAPI.py
+/qa_chain.py
+/qa_chain_fastAPI.py
+/vectorstore.py
+/vectorstore_fastAPI.py
+/utils.py
+/requirements.txt
+/requirements-intel-mac.txt
+/traffic_bot_temp.py
+/Dockerfile
+/Drivers-Handbook.pdf

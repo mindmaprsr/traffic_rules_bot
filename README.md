@@ -1,127 +1,157 @@
 # Traffic Rules Bot
 
-A RAG-based Q&A app for German traffic rules, powered by LangChain, ChromaDB, and HuggingFace.
+A RAG (Retrieval-Augmented Generation) app that answers questions about traffic rules by country. Ask it anything from speed limits to right-of-way rules and it will find the answer directly from the official handbook PDF — no hallucinations, no guessing.
+
+Built with **FastAPI**, **Streamlit**, **LangChain**, **ChromaDB**, and **HuggingFace**.
 
 ---
 
-## Sources
+## How it works
 
+1. On startup, the backend reads the PDF handbooks from the `data/` folder
+2. Each PDF is split into chunks and stored in a ChromaDB vector store (one per country)
+3. When you ask a question, the backend finds the most relevant chunks and passes them to an LLM
+4. The LLM answers using only the retrieved context — it will not make up rules
+5. The Streamlit frontend provides a simple UI to select a country and ask questions
+
+---
+
+## Project structure
+
+```
+traffic_rules_bot/
+├── backend/
+│   ├── app.py            # FastAPI — /ask, /countries, /health endpoints
+│   ├── vectorstore.py    # Loads and builds ChromaDB per country
+│   ├── qa_chain.py       # LangChain RAG chain
+│   ├── config.py         # Reads env vars
+│   ├── utils.py          # Query normalisation
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── app.py            # Streamlit UI
+│   ├── requirements.txt
+│   └── Dockerfile
+├── data/
+│   └── <country>/
+│       └── handbook.pdf  # One PDF per country
+├── docker-compose.yml
+├── .env.example
+└── .gitignore
+```
+
+---
+
+## Adding a country
+
+Drop the official traffic/driving handbook PDF into `data/<country>/handbook.pdf`:
+
+```
+data/
+├── germany/
+│   └── handbook.pdf
+├── uk/
+│   └── handbook.pdf
+└── india/
+    └── handbook.pdf
+```
+
+The country name becomes the key used in the UI dropdown and API requests. Restart the app after adding a new PDF.
+
+**PDF sources:**
 - Germany: https://adilbari.wordpress.com/wp-content/uploads/2015/07/md-guide-to-driving-in-germany.pdf
-- https://www.gettingaroundgermany.info/zeichen2.shtml (free data)
 - UK: https://www.gov.uk/browse/driving/highway-code-road-safety
 
 ---
 
-## Running the FastAPI App
+## Running with Docker Compose (recommended)
 
-### 1. Install dependencies
+### 1. Get a HuggingFace token
 
-```sh
-pip install -r requirements.txt
-```
+Sign up at https://huggingface.co and create a token at Settings → Access Tokens.
 
 ### 2. Set up environment variables
 
-Copy the example and fill in your keys:
-
 ```sh
-cp .env .env.local   # or just edit .env directly
+cp .env.example .env
 ```
 
-`.env` format:
+Edit `.env` and fill in your token:
 
 ```
-OPENAI_API_KEY=your_openai_api_key_here
 HF_TOKEN=your_huggingface_token_here
 ```
 
-> **Never commit `.env` to git.** It is already listed in `.gitignore`.
-
-### 3. Start the server
+### 3. Add at least one country PDF
 
 ```sh
-uvicorn app:app --reload
+mkdir -p data/germany
+cp /path/to/your/handbook.pdf data/germany/handbook.pdf
 ```
 
-The API will be available at `http://localhost:8000`.
+### 4. Start the app
 
-### 4. Interactive API docs
+```sh
+docker compose up --build
+```
 
-Open `http://localhost:8000/docs` in your browser to explore and test the endpoints via Swagger UI.
+The first run will take a few minutes — it installs dependencies and indexes the PDFs.
 
-### 5. Ask a question
+### 5. Open the UI
+
+Go to `http://localhost:8501` in your browser. Select a country, type a question, and hit **Ask**.
+
+---
+
+## API endpoints
+
+The FastAPI backend is also directly accessible at `http://localhost:8000`.
+
+| Method | Path          | Description                          |
+|--------|---------------|--------------------------------------|
+| GET    | `/`           | Check the API is running             |
+| GET    | `/health`     | Health check (used by Docker)        |
+| GET    | `/countries`  | List countries with loaded data      |
+| POST   | `/ask`        | Ask a question                       |
+
+### Example request
 
 ```sh
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "What are the three basic traffic rules in Germany?"}'
+  -d '{"country": "germany", "question": "What is the speed limit on the Autobahn?"}'
 ```
 
-**Response format:**
+### Example response
 
 ```json
 {
-  "answer": "...",
-  "normalized_query": "...",
+  "country": "germany",
+  "answer": "There is no general speed limit on the Autobahn...",
+  "normalized_query": null,
   "source_chunks": [
     {
       "chunk_index": 1,
-      "page": "Page 5",
-      "source_file": "Drivers-Handbook.pdf",
+      "page": "Page 12",
+      "source_file": "handbook.pdf",
       "content": "..."
     }
   ]
 }
 ```
 
-### Available endpoints
-
-| Method | Path      | Description                        |
-|--------|-----------|------------------------------------|
-| POST   | `/ask`    | Ask a question about traffic rules |
-| GET    | `/health` | Health check                       |
+Interactive API docs (Swagger UI) are available at `http://localhost:8000/docs`.
 
 ---
 
-## Running with Docker
-
-Build the image:
+## Stopping the app
 
 ```sh
-docker build -t trafficbot-app .
+docker compose down
 ```
 
-Run the container (pass env vars at runtime):
+To also delete the stored vector database:
 
 ```sh
-docker run -p 8000:8000 \
-  -e OPENAI_API_KEY=your_key \
-  -e HF_TOKEN=your_token \
-  trafficbot-app
-```
-
----
-
-## Running the Streamlit App (original)
-
-```sh
-streamlit run app.py
-```
-
----
-
-## Project Structure
-
-```
-traffic_rules_bot/
-├── app.py                # FastAPI application
-├── config_fastAPI.py     # Env-based config for FastAPI
-├── config.py             # Streamlit-based config (original)
-├── qa_chain_fastAPI.py   # QA chain (no Streamlit dependency)
-├── qa_chain.py           # QA chain (original, Streamlit cached)
-├── vectorstore.py        # ChromaDB vector store loader
-├── utils.py              # Query normalisation
-├── Drivers-Handbook.pdf  # Source PDF
-├── chroma_db_pdf/        # Persisted vector store (auto-generated)
-└── .env                  # API keys (never commit this)
+docker compose down -v
 ```
