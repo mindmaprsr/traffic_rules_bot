@@ -89,7 +89,17 @@ mkdir -p data/germany
 cp /path/to/your/handbook.pdf data/germany/handbook.pdf
 ```
 
-### 4. Start the app
+### 4. Make sure Docker Desktop is running
+
+Open **Docker Desktop** from your Applications folder and wait for the whale icon in the menu bar to stop animating before proceeding.
+
+If you see this error:
+```
+/var/run/docker.sock: connect: no such file or directory
+```
+It means Docker Desktop is not running. Start it and wait until it's ready, then try again. If it's already open, use the menu bar icon → **Restart**.
+
+### 5. Start the app
 
 ```sh
 docker compose up --build
@@ -97,7 +107,7 @@ docker compose up --build
 
 The first run will take a few minutes — it installs dependencies and indexes the PDFs.
 
-### 5. Open the UI
+### 6. Open the UI
 
 Go to `http://localhost:8501` in your browser. Select a country, type a question, and hit **Ask**.
 
